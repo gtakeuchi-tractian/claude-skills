@@ -1,0 +1,2616 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Camu API",
+    "version": "1.0.0",
+    "description": "# Camu API Documentation\n\nWelcome to the Camu API - a comprehensive, developer-centric RESTful interface for managing Brazilian Documentos Fiscais Eletrônicos (NFe, CTe, NFSe, etc.) within the CAMU platform.\n\n## Overview\n\nThe Camu API provides programmatic access to:\n- **Electronic Tax Documents (DFes)**: Query, retrieve, and manage NFe, CTe, and NFSe documents\n- **Companies**: Access company information within your tenant\n- **Users**: Manage user accounts in bulk\n- **File Uploads**: Upload and process electronic fiscal documents\n\n## Authentication\n\nAll API endpoints require authentication via an API key. Include your API key in the `x-api-key` header of every request:\n\n```\nx-api-key: your-api-key-here\n```\n\nContact your Camu administrator to obtain an API key for your application.\n\n## Rate Limiting\n\nThe API enforces the following rate limits:\n- **Rate Limit**: 100 requests per second\n- **Burst Limit**: 500 requests\n\n## Error Handling\n\nThe API uses standard HTTP status codes to indicate success or failure:\n\n- **200 OK**: Request successful\n- **400 Bad Request**: Invalid input or validation error\n- **401 Unauthorized**: Missing or invalid API key\n- **404 Not Found**: Resource not found\n- **500 Internal Server Error**: Server-side error\n\nError responses include a JSON body with details:\n\n```json\n{\n  \"error\": \"Detailed error message\"\n}\n```\n\n## Pagination\n\nList endpoints support offset-based pagination:\n- Use the `limit` query parameter to specify the maximum number of results (1-100, default: 100)\n- Use the `offset` query parameter to skip results\n- The response includes `nextOffset` and `nextUrl` fields when more results are available\n\n## Field Filtering\n\nList endpoints support field filtering via the `fields` query parameter:\n- Specify comma-separated field names to return only those fields\n- Example: `fields=documentType,documentKey,documentNumber`\n- If not specified, all fields are returned (except `xmlContent` which must be explicitly requested)\n\n## Base URLs\n\n- **Production**: `https://api.service.camu.com.br`\n- **Staging**: `https://api.staging.camu.com.br`\n",
+    "contact": {
+      "name": "Camu Support",
+      "url": "https://camu.com.br",
+      "email": "engineering@camu.com.br"
+    },
+    "license": {
+      "name": "Proprietary",
+      "url": "https://camu.com.br/terms"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.service.camu.com.br",
+      "description": "Production server"
+    },
+    {
+      "url": "https://api.staging.camu.com.br",
+      "description": "Staging server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "dfes",
+      "description": "Operations for managing Documentos Fiscais Eletrônicos (DFes).\n\n**Supported Document Types:**\n\n| Document Type | List | Get | XML | PDF | Events | Upload |\n|---------------|------|-----|-----|-----|--------|--------|\n| **NFe** (Nota Fiscal Eletrônica) | ✓ | ✓ | ✓ | ✓ DANFE | ✓ | ✓ |\n| **CTe** (Conhecimento de Transporte Eletrônico) | ✓ | ✓ | ✓ | ✓ DACTE | ✓ | ✓ |\n| **CT-e OS** (Conhecimento de Transporte Eletrônico OS) | ✓ | ✓ | ✓ | ✓ DACTE-OS | ✓ | ✓ |\n| **NFSe** (Nota Fiscal de Serviços Eletrônica) | ✓ | ✓ | ✓ | ✓ DANFSE | ✓ | Via sync |\n\n**Note on NFSe:** NFSe documents are automatically synced from municipal systems via the NFSe Nacional integration. They can be queried like any other DFe type.\n\n**Document Events:** Events represent post-issuance actions on documents. NFe supports manifestações (ConfirmOperation, AcknowledgeReceipt, UnknownOperation, OperationNotPerformed), corrections, and cancellations. CTe additionally supports delivery events (DeliveryNote, DeliverySuccess, DeliveryFailed) and MDF-e linkage events.\n\nEach document has a unique access key (chave de acesso) that serves as its primary identifier.\n",
+      "externalDocs": {
+        "description": "Learn more about DFes",
+        "url": "https://www.nfe.fazenda.gov.br/"
+      }
+    },
+    {
+      "name": "companies",
+      "description": "Operations for managing companies within your CAMU tenant.\n\nCompanies represent legal entities (with CNPJ) that issue or receive electronic fiscal documents.\n",
+      "externalDocs": {
+        "description": "Find out more",
+        "url": "https://camu.com.br"
+      }
+    },
+    {
+      "name": "files",
+      "description": "Operations for uploading and processing files.\n\nFile upload endpoints allow you to submit electronic fiscal documents (XML format) for processing and storage in the CAMU system.\n\n**Supported document types for upload:**\n- NFe (Nota Fiscal Eletrônica)\n- CTe (Conhecimento de Transporte Eletrônico)\n\n**Note:** NFSe documents are ingested via the NFSe Nacional integration, not through this upload endpoint.\n",
+      "externalDocs": {
+        "description": "Find out more",
+        "url": "https://camu.com.br"
+      }
+    },
+    {
+      "name": "webhooks",
+      "description": "Webhook notifications sent by Camu to your registered endpoints.\n\nWebhooks provide real-time notifications when events occur in your tenant,\nenabling event-driven integrations without polling.\n\n**Supported Events:**\n- `captured` - New document captured\n- `canceled` - Document canceled\n- `validation_succeed` - Validation passed\n- `validation_failed` - Validation failed\n- `manifestation` - Manifestation event received\n"
+    },
+    {
+      "name": "audit",
+      "description": "Audit log endpoints for tracking changes to settings and other audited resources.\n\nEntries record the old and new values, which fields changed, who made the change, and when.\n"
+    }
+  ],
+  "paths": {
+    "/{documentType}": {
+      "get": {
+        "tags": [
+          "dfes"
+        ],
+        "summary": "List DFes",
+        "description": "Retrieves a paginated list of DFe summaries for the authenticated tenant.\n\nThis endpoint returns DFe objects. Use the `fields` parameter to control which fields are returned.\n\n**Supported Document Types**:\n- `nfe`: Nota Fiscal Eletrônica\n- `cte`: Conhecimento de Transporte Eletrônico\n- `cte-os`: Conhecimento de Transporte Eletrônico OS\n- `nfse`: Nota Fiscal de Serviços Eletrônica\n\n**Field Filtering**: Use the `fields` parameter to specify which fields to return. The `xmlContent` field is only returned when explicitly requested.\n\n**Pagination**: Results are returned in pages. Use `nextOffset` and `nextUrl` from the response to fetch the next page.\n",
+        "operationId": "listDfes",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "documentType",
+            "required": true,
+            "description": "The type of electronic fiscal document to list.\n",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "nfe",
+                "cte",
+                "cte-os",
+                "nfse"
+              ]
+            },
+            "example": "nfe"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "description": "Maximum number of items to return per page",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 100
+            },
+            "example": 20
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "description": "Number of items to skip before starting to return results.\n\nUse the `nextOffset` value from the previous response to retrieve subsequent pages.\n",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "example": 0
+          },
+          {
+            "in": "query",
+            "name": "fields",
+            "description": "Comma-separated list of fields to return.\n\nAvailable fields: `documentType`, `documentKey`, `documentNumber`, `documentSeries`, `emissionDate`, `manifestationStatus`, `documentStatus`, `erpDocumentStatus`, `content`, `xmlContent`\n\nIf not specified, all fields except `xmlContent` are returned. The `xmlContent` field must be explicitly requested.\n\n**Note**: Requesting `xmlContent` will fetch the raw XML from storage for each document, which may impact response time.\n",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "documentType,documentKey,documentNumber,documentStatus"
+          },
+          {
+            "in": "query",
+            "name": "document_status",
+            "description": "Filter documents by validation status. Accepts comma-separated values for multiple statuses.\n\n**Allowed values**:\n- `captured`: Documents that have been captured but not yet processed\n- `in_review`: Documents currently under review\n- `approved`: Documents that have been approved\n- `errors`: Documents with validation errors\n- `canceled`: Documents that have been canceled\n\n**Example**: `document_status=approved,canceled` returns only approved and canceled documents.\n",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "approved,canceled"
+          },
+          {
+            "in": "query",
+            "name": "manifestation_status",
+            "description": "Filter documents by manifestation status (NFe only). Accepts comma-separated values for multiple statuses.\n\n**Allowed values**:\n- `acknowledgement_of_issuance`: Ciência da Emissão - Recipient has acknowledged the document\n- `confirmation_of_operation`: Confirmação da Operação - Operation confirmed by recipient\n- `operation_unknown`: Desconhecimento da Operação - Recipient is unaware of the operation\n- `operation_not_performed`: Operação não Realizada - Operation was not performed\n- `executing`: Manifestação em processamento - Manifestation is being processed\n\n**Example**: `manifestation_status=confirmation_of_operation` returns only documents with confirmed operations.\n\n**Note**: This filter is most relevant for NFe documents. Other document types may not have manifestation statuses.\n",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "confirmation_of_operation"
+          },
+          {
+            "in": "query",
+            "name": "issue_date_start",
+            "description": "Filter documents issued on or after this date (inclusive).\nFormat: `YYYY-MM-DD` (ISO 8601 date).\n\n**Example**: `issue_date_start=2025-01-01` returns documents issued from January 1, 2025.\n",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "example": "2025-01-01"
+          },
+          {
+            "in": "query",
+            "name": "issue_date_end",
+            "description": "Filter documents issued on or before this date (inclusive).\nFormat: `YYYY-MM-DD` (ISO 8601 date).\n\n**Example**: `issue_date_end=2025-12-31` returns documents issued up to December 31, 2025.\n",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "example": "2025-12-31"
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "description": "Sort order for the results. Format: `field:direction`.\n\n**Available fields**:\n- `issue_date`: Sort by document issue/emission date\n- `captured_at`: Sort by the date the document was captured into the system\n\n**Directions**: `asc` (ascending, oldest first) or `desc` (descending, newest first).\nIf direction is omitted, defaults to `desc`.\n\n**Examples**:\n- `sort=issue_date:desc` — newest issue dates first\n- `sort=captured_at:asc` — oldest captures first\n",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "issue_date:asc",
+                "issue_date:desc",
+                "captured_at:asc",
+                "captured_at:desc"
+              ]
+            },
+            "example": "issue_date:desc"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved DFes list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDfesResponse"
+                },
+                "examples": {
+                  "nfeList": {
+                    "summary": "NFe documents list",
+                    "value": {
+                      "documents": [
+                        {
+                          "documentType": "nfe",
+                          "documentKey": "11250202916265003770550010002236881280492015",
+                          "documentNumber": "223688",
+                          "emissionDate": "2025-02-09T10:30:00-03:00",
+                          "content": {
+                            "nfeProc": {
+                              "NFe": {
+                                "infNFe": {
+                                  "ide": {
+                                    "nNF": "223688"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "documentType": "nfe",
+                          "documentKey": "11250102916265003770550010002236891280492016",
+                          "documentNumber": "223689",
+                          "emissionDate": "2025-02-09T11:45:00-03:00",
+                          "content": {
+                            "nfeProc": {
+                              "NFe": {
+                                "infNFe": {
+                                  "ide": {
+                                    "nNF": "223689"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ],
+                      "nextOffset": 2,
+                      "nextUrl": "https://api.service.camu.com.br/nfe?offset=2&limit=2"
+                    }
+                  },
+                  "cteList": {
+                    "summary": "CTe documents list",
+                    "value": {
+                      "documents": [
+                        {
+                          "documentType": "cte",
+                          "documentKey": "41250298765432000188570010000054321098765432",
+                          "documentNumber": "5432",
+                          "emissionDate": "2025-02-10T08:15:00-03:00",
+                          "content": {
+                            "cteProc": {
+                              "CTe": {
+                                "infCte": {
+                                  "ide": {
+                                    "nCT": "5432",
+                                    "mod": "57"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ],
+                      "nextOffset": 1,
+                      "nextUrl": "https://api.service.camu.com.br/cte?offset=1&limit=1"
+                    }
+                  },
+                  "nfseList": {
+                    "summary": "NFSe documents list (synced via NFSe Nacional)",
+                    "value": {
+                      "documents": [
+                        {
+                          "documentType": "nfse",
+                          "documentKey": "NFSe12345678901234567890123456789012345678901234",
+                          "documentNumber": "12345",
+                          "emissionDate": "2025-02-11T14:20:00-03:00",
+                          "content": {
+                            "NFSe": {
+                              "infNFSe": {
+                                "numero": "12345",
+                                "dhProc": "2025-02-11T14:20:00-03:00"
+                              }
+                            }
+                          }
+                        }
+                      ],
+                      "nextOffset": 1,
+                      "nextUrl": "https://api.service.camu.com.br/nfse?offset=1&limit=1"
+                    }
+                  },
+                  "withXmlContent": {
+                    "summary": "Response with xmlContent field requested",
+                    "value": {
+                      "documents": [
+                        {
+                          "documentType": "nfe",
+                          "documentKey": "11250202916265003770550010002236881280492015",
+                          "xmlContent": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><nfeProc>...</nfeProc>"
+                        }
+                      ],
+                      "nextOffset": 1,
+                      "nextUrl": "https://api.service.camu.com.br/nfe?offset=1&limit=1&fields=documentType,documentKey,xmlContent"
+                    }
+                  },
+                  "emptyResult": {
+                    "summary": "Empty result (no DFes found)",
+                    "value": {
+                      "documents": []
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/{documentType}/events": {
+      "get": {
+        "tags": [
+          "dfes"
+        ],
+        "summary": "List events",
+        "description": "Retrieves a paginated list of events across all documents of a specific type for the authenticated tenant.\n\nThis endpoint provides a unified view of events across all documents, useful for building\nevent-driven integrations and audit logs. Only allowlisted event types are returned.\n\n**Currently exposed event types:**\n| Document Type | Event Types |\n|---------------|-------------|\n| `nfe` | `Cancel` (Cancelamento), `Approved` (Validation approved), `ValidationFailed` (Validation failed) |\n| `cte` | _(none yet)_ |\n| `cte-os` | _(none yet)_ |\n| `nfse` | _(none yet)_ |\n\n**Pagination:** Uses cursor-based pagination with UUIDv7 IDs:\n1. First request: `GET /{documentType}/events?limit=50`\n2. Check `has_more` in response to see if more events exist\n3. If `has_more` is true, use `next_cursor` for the next request: `GET /{documentType}/events?cursor={next_cursor}&limit=50`\n4. Repeat until `has_more` is false\n",
+        "operationId": "listEvents",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "documentType",
+            "required": true,
+            "description": "The type of electronic fiscal document.\n",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "nfe",
+                "cte",
+                "cte-os",
+                "nfse"
+              ]
+            },
+            "example": "nfe"
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "description": "Cursor for pagination (UUIDv7 format).\n\nUse the `next_cursor` value from a previous response to fetch the next page.\n",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "0192d4e5-7a8b-7c9d-8e0f-1a2b3c4d5e6f"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "description": "Maximum number of events to return per page.\n\nDefaults to 50 if not specified.\n",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            },
+            "example": 50
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "description": "Filter events by source.\n\n- `camu`: Events generated by the Camu platform\n- `sefaz`: Events from the Brazilian tax authority\n",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "camu",
+                "sefaz"
+              ]
+            },
+            "example": "sefaz"
+          },
+          {
+            "in": "query",
+            "name": "event_type",
+            "description": "Filter events by event type(s). Comma-separated list of event type values.\n\nOnly events matching the specified types (and within the allowlisted types for the document type) are returned.\n\n**NFe event types:** `Cancel`, `Approved`, `ValidationFailed`, `Captured`, `Emitted`\n",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "Cancel,Approved"
+          },
+          {
+            "in": "query",
+            "name": "tax_id",
+            "description": "Filter events by company CNPJ(s). Comma-separated list of 14-digit CNPJs.\n\nEach CNPJ must belong to the authenticated tenant; returns 400 if any are not found.\n",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "12345678000199,98765432000188"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved events list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListUnifiedEventsResponse"
+                },
+                "examples": {
+                  "eventsWithMore": {
+                    "summary": "Events list with more pages available",
+                    "value": {
+                      "events": [
+                        {
+                          "id": "0192d4e5-7a8b-7c9d-8e0f-1a2b3c4d5e6f",
+                          "document_key": "11250202916265003770550010002236881280492015",
+                          "document_type": "nfe",
+                          "event_type": "Cancel",
+                          "event_type_code": "110111",
+                          "event_category": "canceled",
+                          "source": "sefaz",
+                          "event_content": {
+                            "resEvento": {
+                              "tpEvento": "110111",
+                              "xEvento": "Cancelamento"
+                            }
+                          },
+                          "created_at": "2025-02-03T10:30:00.000Z"
+                        }
+                      ],
+                      "has_more": true,
+                      "next_cursor": "0192d4e5-7a8b-7c9d-8e0f-1a2b3c4d5e6f"
+                    }
+                  },
+                  "emptyResult": {
+                    "summary": "No events found",
+                    "value": {
+                      "events": [],
+                      "has_more": false,
+                      "next_cursor": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/{documentType}/events/{eventId}": {
+      "get": {
+        "tags": [
+          "dfes"
+        ],
+        "summary": "Get event by ID",
+        "description": "Retrieves a specific event by its unique identifier.\n\nUse this endpoint to fetch the full details of an event when you have its ID,\nfor example from a webhook notification or from the events list.\n\n**Security:** Only events belonging to the authenticated tenant can be accessed.\nAttempting to access events from other tenants will return 404 Not Found.\n",
+        "operationId": "getEventById",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "documentType",
+            "required": true,
+            "description": "The type of electronic fiscal document.\n\n**Note:** Currently only `nfe` is supported. Support for `cte` and `nfse` is planned.\n",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "nfe"
+              ]
+            },
+            "example": "nfe"
+          },
+          {
+            "in": "path",
+            "name": "eventId",
+            "required": true,
+            "description": "The unique identifier (UUID) of the event",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "0192d4e5-7a8b-7c9d-8e0f-1a2b3c4d5e6f"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved event",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnifiedEvent"
+                },
+                "examples": {
+                  "capturedEvent": {
+                    "summary": "Document captured event",
+                    "value": {
+                      "id": "0192d4e5-7a8b-7c9d-8e0f-1a2b3c4d5e6f",
+                      "document_key": "11250202916265003770550010002236881280492015",
+                      "type": "captured",
+                      "source": "camu",
+                      "timestamp": "2025-02-03T10:30:00.000Z",
+                      "content": {
+                        "capturedBy": "sefaz-sync"
+                      },
+                      "_links": [
+                        {
+                          "type": "detail",
+                          "url": "/nfe/11250202916265003770550010002236881280492015"
+                        }
+                      ]
+                    }
+                  },
+                  "validationFailedEvent": {
+                    "summary": "Validation failed event",
+                    "value": {
+                      "id": "0192d4e5-7a8b-7c9d-8e0f-1a2b3c4d5e70",
+                      "document_key": "11250202916265003770550010002236881280492015",
+                      "type": "validation_failed",
+                      "source": "camu",
+                      "timestamp": "2025-02-03T10:31:00.000Z",
+                      "content": [
+                        {
+                          "lineNumber": 1,
+                          "classification": {
+                            "cfop": 1565,
+                            "classification": "Uso consumo"
+                          },
+                          "validations": [
+                            {
+                              "type": "ICMS",
+                              "result": "error",
+                              "message": "ICMS Divergente"
+                            },
+                            {
+                              "type": "IPI",
+                              "result": "approved"
+                            }
+                          ]
+                        }
+                      ],
+                      "_links": [
+                        {
+                          "type": "detail",
+                          "url": "/nfe/11250202916265003770550010002236881280492015"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Event not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "notFound": {
+                    "summary": "Event not found",
+                    "value": {
+                      "error": "Event not found"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/{documentType}/events/{eventId}/ack": {
+      "post": {
+        "tags": [
+          "dfes"
+        ],
+        "summary": "Acknowledge event",
+        "description": "Acknowledges that an event has been successfully processed by the client.\n\n**Security:** Only events belonging to the authenticated tenant can be acknowledged.\nAttempting to acknowledge events from other tenants will return 403 Forbidden.\n\n> **Note:** This endpoint is **optional** for event polling integrations. When using the\n> `GET /{documentType}/events` endpoint, you can simply track the last processed checkpoint\n> on your side. However, this endpoint is **important for webhook integrations** where Camu\n> pushes events to your system - acknowledging events confirms successful delivery and\n> prevents retries.\n\n**When to use:**\n- **Event polling:** Optional - you can manage checkpoints client-side\n- **Webhook integrations:** Recommended - confirms event delivery and stops retries\n\n**Idempotency:**\nAcknowledging the same event ID multiple times is safe and will return success.\n",
+        "operationId": "acknowledgeEvent",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "documentType",
+            "required": true,
+            "description": "The type of electronic fiscal document.\n\n**Note:** Currently only `nfe` is supported. Support for `cte` and `nfse` is planned.\n",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "nfe"
+              ]
+            },
+            "example": "nfe"
+          },
+          {
+            "in": "path",
+            "name": "eventId",
+            "required": true,
+            "description": "The unique identifier (UUID) of the event to acknowledge.\n\nThis is the event ID from the events list response.\n",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "0192d4e5-7a8b-7c9d-8e0f-1a2b3c4d5e6f"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Event acknowledged successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AckEventResponse"
+                },
+                "examples": {
+                  "success": {
+                    "summary": "Successful acknowledgment",
+                    "value": {
+                      "acknowledged": true,
+                      "eventId": "0192d4e5-7a8b-7c9d-8e0f-1a2b3c4d5e6f"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request (invalid event ID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "invalidEventId": {
+                    "summary": "Invalid event ID format",
+                    "value": {
+                      "error": "Invalid eventId: must be a valid UUID"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden - Event belongs to a different tenant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "wrongTenant": {
+                    "summary": "Event belongs to another tenant",
+                    "value": {
+                      "error": "Forbidden: Event does not belong to your tenant"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Event not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "notFound": {
+                    "summary": "Event not found",
+                    "value": {
+                      "error": "Event not found"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/{documentType}/{documentKey}": {
+      "get": {
+        "tags": [
+          "dfes"
+        ],
+        "summary": "Get a specific DFe by document key",
+        "description": "Retrieves the complete DFe document including all parsed XML content and the raw XML.\n\nThe `content` field contains the full structured data from the DFe XML.\nThe `xmlContent` field contains the raw XML string.\n\n**Document Key**: The 44-character access key (chave de acesso) that uniquely identifies the document.\n",
+        "operationId": "getDfe",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "documentType",
+            "required": true,
+            "description": "The type of electronic fiscal document",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "nfe",
+                "cte",
+                "cte-os",
+                "nfse"
+              ]
+            },
+            "example": "nfe"
+          },
+          {
+            "in": "path",
+            "name": "documentKey",
+            "required": true,
+            "description": "The 44-character access key (chave de acesso).\n\nFormat: 44 alphanumeric characters\n",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9]+$",
+              "minLength": 1
+            },
+            "example": "11250202916265003770550010002236881280492015"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved DFe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dfe"
+                },
+                "examples": {
+                  "nfeDocument": {
+                    "summary": "Complete NFe document",
+                    "value": {
+                      "documentType": "nfe",
+                      "documentKey": "11250202916265003770550010002236881280492015",
+                      "documentNumber": "223688",
+                      "capturedAt": "2025-02-09T15:30:00.000Z",
+                      "content": {
+                        "nfeProc": {
+                          "NFe": {
+                            "infNFe": {
+                              "ide": {
+                                "cUF": "11",
+                                "nNF": "223688",
+                                "dhEmi": "2025-02-09T10:30:00-03:00"
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "xmlContent": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><nfeProc>...</nfeProc>"
+                    }
+                  },
+                  "cteDocument": {
+                    "summary": "Complete CTe document",
+                    "value": {
+                      "documentType": "cte",
+                      "documentKey": "41250298765432000188570010000054321098765432",
+                      "documentNumber": "5432",
+                      "capturedAt": "2025-02-10T10:00:00.000Z",
+                      "content": {
+                        "cteProc": {
+                          "CTe": {
+                            "infCte": {
+                              "ide": {
+                                "cUF": "41",
+                                "nCT": "5432",
+                                "mod": "57",
+                                "dhEmi": "2025-02-10T08:15:00-03:00"
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "xmlContent": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><cteProc>...</cteProc>"
+                    }
+                  },
+                  "nfseDocument": {
+                    "summary": "Complete NFSe document (synced via NFSe Nacional)",
+                    "value": {
+                      "documentType": "nfse",
+                      "documentKey": "NFSe12345678901234567890123456789012345678901234",
+                      "documentNumber": "12345",
+                      "capturedAt": "2025-02-11T16:00:00.000Z",
+                      "content": {
+                        "NFSe": {
+                          "infNFSe": {
+                            "numero": "12345",
+                            "dhProc": "2025-02-11T14:20:00-03:00",
+                            "prestador": {
+                              "cnpj": "12345678000199"
+                            },
+                            "tomador": {
+                              "cnpj": "98765432000188"
+                            }
+                          }
+                        }
+                      },
+                      "xmlContent": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><NFSe>...</NFSe>"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "DFe not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "notFound": {
+                    "summary": "DFe not found",
+                    "value": {
+                      "error": "NFe not found"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/{documentType}/{documentKey}/xml": {
+      "get": {
+        "tags": [
+          "dfes"
+        ],
+        "summary": "Get raw DFe XML",
+        "description": "Returns the original DFe XML document as submitted to the Brazilian tax authorities.\n\nThis endpoint provides the complete, unmodified XML file including:\n- The signed DFe structure\n- Digital signatures\n- Authorization protocol information\n\n**Use Cases**:\n- Archiving original documents\n- Importing into accounting systems\n- Legal compliance requirements\n",
+        "operationId": "getDfeXml",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "documentType",
+            "required": true,
+            "description": "The type of electronic fiscal document",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "nfe",
+                "cte",
+                "cte-os",
+                "nfse"
+              ]
+            },
+            "example": "nfe"
+          },
+          {
+            "in": "path",
+            "name": "documentKey",
+            "required": true,
+            "description": "The access key (chave de acesso)",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9]+$",
+              "minLength": 1
+            },
+            "example": "11250202916265003770550010002236881280492015"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Raw DFe XML document",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string",
+                  "description": "Complete DFe XML content"
+                },
+                "examples": {
+                  "success": {
+                    "summary": "DFe XML document",
+                    "value": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<nfeProc versao=\"4.00\" xmlns=\"http://www.portalfiscal.inf.br/nfe\">\n  <NFe xmlns=\"http://www.portalfiscal.inf.br/nfe\">\n    <infNFe Id=\"NFe11250202916265003770550010002236881280492015\" versao=\"4.00\">\n      <!-- ... XML content ... -->\n    </infNFe>\n  </NFe>\n  <protNFe versao=\"4.00\">\n    <!-- Authorization protocol -->\n  </protNFe>\n</nfeProc>\n"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "DFe not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "NFe not found"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/{documentType}/{documentKey}/events": {
+      "get": {
+        "tags": [
+          "dfes"
+        ],
+        "summary": "Get DFe events",
+        "description": "Retrieves all events associated with a specific DFe document.\n\nEvents represent actions that occurred on the document after its issuance.\n\n**NFe Event Types:**\n| tpEvento | eventType | Description |\n|----------|-----------|-------------|\n| 110110 | Correction | Carta de Correção Eletrônica (CCe) |\n| 110111 | Cancel | Document cancellation |\n| 210200 | ConfirmOperation | Confirmação da Operação (recipient confirms) |\n| 210210 | AcknowledgeReceipt | Ciência da Operação (recipient acknowledges) |\n| 210220 | UnknownOperation | Desconhecimento da Operação (recipient doesn't recognize) |\n| 210240 | OperationNotPerformed | Operação não Realizada (operation not performed) |\n\n**CTe Event Types:**\n| tpEvento | eventType | Description |\n|----------|-----------|-------------|\n| - | Authorized | CTe authorization event |\n| 110110 | Correction | Carta de Correção Eletrônica |\n| 110111 | Cancel | Document cancellation |\n| 110180 | DeliveryNote | Comprovante de Entrega (delivery note) |\n| 110181 | CancelDeliveryNote | Cancelamento do Comprovante de Entrega |\n| 110190 | DeliveryFailed | Insucesso na Entrega (delivery failed) |\n| 110191 | DeliverySuccess | Entrega Realizada (delivery success) |\n| 310610 | AuthorizedMDFe | MDF-e Autorizado (linked to authorized MDF-e) |\n| 310611 | CancelMDFe | MDF-e Cancelado (linked MDF-e cancelled) |\n\n**NFSe Event Types:**\n| eventType | Description |\n|-----------|-------------|\n| CANCELAMENTO | NFSe cancellation |\n| CANCELAMENTO_DEFERIDO_ANALISE_FISCAL | Cancellation approved after fiscal analysis |\n| CANCELAMENTO_POR_SUBSTITUICAO | Cancellation by substitution |\n| CONFIRMACAO_TOMADOR | Service taker confirmation |\n| SOLICITACAO_CANCELAMENTO_ANALISE_FISCAL | Cancellation request under fiscal analysis |\n\n**Note**: Not all documents have events. A newly issued document that hasn't been manifested or corrected will return an empty events array.\n",
+        "operationId": "getDfeEvents",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "documentType",
+            "required": true,
+            "description": "The type of electronic fiscal document",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "nfe",
+                "cte",
+                "cte-os",
+                "nfse"
+              ]
+            },
+            "example": "nfe"
+          },
+          {
+            "in": "path",
+            "name": "documentKey",
+            "required": true,
+            "description": "The access key (chave de acesso)",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9]+$",
+              "minLength": 1
+            },
+            "example": "11250202916265003770550010002236881280492015"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved DFe events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDfeEventsResponse"
+                },
+                "examples": {
+                  "nfeManifestacaoEvents": {
+                    "summary": "NFe with manifestação events",
+                    "value": {
+                      "events": [
+                        {
+                          "id": "event-uuid-123",
+                          "documentKey": "11250202916265003770550010002236881280492015",
+                          "documentType": "nfe",
+                          "eventType": "AcknowledgeReceipt",
+                          "eventTypeCode": "210210",
+                          "eventCategory": "manifestation",
+                          "eventContent": {
+                            "procEventoNFe": {
+                              "evento": {
+                                "infEvento": {
+                                  "tpEvento": "210210",
+                                  "xEvento": "Ciencia da Operacao",
+                                  "dhEvento": "2025-02-10T14:30:00-03:00"
+                                }
+                              }
+                            }
+                          },
+                          "createdAt": "2025-02-10T14:30:00.000Z"
+                        },
+                        {
+                          "id": "event-uuid-456",
+                          "documentKey": "11250202916265003770550010002236881280492015",
+                          "documentType": "nfe",
+                          "eventType": "ConfirmOperation",
+                          "eventTypeCode": "210200",
+                          "eventCategory": "manifestation",
+                          "eventContent": {
+                            "procEventoNFe": {
+                              "evento": {
+                                "infEvento": {
+                                  "tpEvento": "210200",
+                                  "xEvento": "Confirmacao da Operacao",
+                                  "dhEvento": "2025-02-11T09:15:00-03:00"
+                                }
+                              }
+                            }
+                          },
+                          "createdAt": "2025-02-11T09:15:00.000Z"
+                        }
+                      ]
+                    }
+                  },
+                  "nfeCorrectionEvent": {
+                    "summary": "NFe with Carta de Correção Eletrônica",
+                    "value": {
+                      "events": [
+                        {
+                          "id": "event-uuid-789",
+                          "documentKey": "11250202916265003770550010002236881280492015",
+                          "documentType": "nfe",
+                          "eventType": "Correction",
+                          "eventTypeCode": "110110",
+                          "eventCategory": "correction",
+                          "eventContent": {
+                            "procEventoNFe": {
+                              "evento": {
+                                "infEvento": {
+                                  "tpEvento": "110110",
+                                  "xEvento": "Carta de Correcao",
+                                  "xCorrecao": "Onde se lê: 'Produto X', leia-se: 'Produto Y'",
+                                  "dhEvento": "2025-02-12T16:45:00-03:00"
+                                }
+                              }
+                            }
+                          },
+                          "createdAt": "2025-02-12T16:45:00.000Z"
+                        }
+                      ]
+                    }
+                  },
+                  "nfeCancelEvent": {
+                    "summary": "NFe with cancellation event",
+                    "value": {
+                      "events": [
+                        {
+                          "id": "event-uuid-abc",
+                          "documentKey": "11250202916265003770550010002236881280492015",
+                          "documentType": "nfe",
+                          "eventType": "Cancel",
+                          "eventTypeCode": "110111",
+                          "eventCategory": "canceled",
+                          "eventContent": {
+                            "procEventoNFe": {
+                              "evento": {
+                                "infEvento": {
+                                  "tpEvento": "110111",
+                                  "xEvento": "Cancelamento",
+                                  "xJust": "Erro de digitação no valor do produto",
+                                  "dhEvento": "2025-02-09T18:00:00-03:00"
+                                }
+                              }
+                            }
+                          },
+                          "createdAt": "2025-02-09T18:00:00.000Z"
+                        }
+                      ]
+                    }
+                  },
+                  "cteDeliveryEvents": {
+                    "summary": "CTe with delivery events",
+                    "value": {
+                      "events": [
+                        {
+                          "id": "event-uuid-def",
+                          "documentKey": "41250298765432000188570010000054321098765432",
+                          "documentType": "cte",
+                          "eventType": "DeliveryNote",
+                          "eventTypeCode": "110180",
+                          "eventCategory": "delivery",
+                          "eventContent": {
+                            "procEventoCTe": {
+                              "evento": {
+                                "infEvento": {
+                                  "tpEvento": "110180",
+                                  "xEvento": "Comprovante de Entrega do CT-e",
+                                  "dhEvento": "2025-02-13T10:30:00-03:00"
+                                }
+                              }
+                            }
+                          },
+                          "createdAt": "2025-02-13T10:30:00.000Z"
+                        },
+                        {
+                          "id": "event-uuid-ghi",
+                          "documentKey": "41250298765432000188570010000054321098765432",
+                          "documentType": "cte",
+                          "eventType": "DeliverySuccess",
+                          "eventTypeCode": "110191",
+                          "eventCategory": "delivery",
+                          "eventContent": {
+                            "procEventoCTe": {
+                              "evento": {
+                                "infEvento": {
+                                  "tpEvento": "110191",
+                                  "xEvento": "Informacoes da Entrega do CT-e",
+                                  "dhEvento": "2025-02-13T11:00:00-03:00"
+                                }
+                              }
+                            }
+                          },
+                          "createdAt": "2025-02-13T11:00:00.000Z"
+                        }
+                      ]
+                    }
+                  },
+                  "cteMdfeEvents": {
+                    "summary": "CTe with MDF-e linkage events",
+                    "value": {
+                      "events": [
+                        {
+                          "id": "event-uuid-jkl",
+                          "documentKey": "41250298765432000188570010000054321098765432",
+                          "documentType": "cte",
+                          "eventType": "AuthorizedMDFe",
+                          "eventTypeCode": "310610",
+                          "eventCategory": "document",
+                          "eventContent": {
+                            "procEventoCTe": {
+                              "evento": {
+                                "infEvento": {
+                                  "tpEvento": "310610",
+                                  "xEvento": "MDF-e Autorizado",
+                                  "dhEvento": "2025-02-14T08:00:00-03:00"
+                                }
+                              }
+                            }
+                          },
+                          "createdAt": "2025-02-14T08:00:00.000Z"
+                        }
+                      ]
+                    }
+                  },
+                  "cteAuthorizedEvent": {
+                    "summary": "CTe with authorization event",
+                    "value": {
+                      "events": [
+                        {
+                          "id": "event-uuid-mno",
+                          "documentKey": "41250298765432000188570010000054321098765432",
+                          "documentType": "cte",
+                          "eventType": "Authorized",
+                          "eventTypeCode": null,
+                          "eventCategory": null,
+                          "eventContent": {
+                            "cteProc": {
+                              "protCTe": {
+                                "infProt": {
+                                  "cStat": "100",
+                                  "xMotivo": "Autorizado o uso do CT-e",
+                                  "dhRecbto": "2025-02-10T08:30:00-03:00"
+                                }
+                              }
+                            }
+                          },
+                          "createdAt": "2025-02-10T08:30:00.000Z"
+                        }
+                      ]
+                    }
+                  },
+                  "nfseCancelamentoEvent": {
+                    "summary": "NFSe with cancellation event",
+                    "value": {
+                      "events": [
+                        {
+                          "id": "event-uuid-pqr",
+                          "documentKey": "NFSe12345678901234567890123456789012345678901234",
+                          "documentType": "nfse",
+                          "eventType": "Cancel",
+                          "eventTypeCode": "CANCELAMENTO",
+                          "eventCategory": "canceled",
+                          "eventContent": {
+                            "pedidoCancelamento": {
+                              "infPedidoCancelamento": {
+                                "codigoCancelamento": "1",
+                                "motivoCancelamento": "Erro na emissão"
+                              }
+                            }
+                          },
+                          "createdAt": "2025-02-15T11:00:00.000Z"
+                        }
+                      ]
+                    }
+                  },
+                  "nfseConfirmacaoTomadorEvent": {
+                    "summary": "NFSe with service taker confirmation",
+                    "value": {
+                      "events": [
+                        {
+                          "id": "event-uuid-stu",
+                          "documentKey": "NFSe12345678901234567890123456789012345678901234",
+                          "documentType": "nfse",
+                          "eventType": "ServiceTakerConfirmation",
+                          "eventTypeCode": "CONFIRMACAO_TOMADOR",
+                          "eventCategory": "manifestation",
+                          "eventContent": {
+                            "confirmacaoTomador": {
+                              "dataConfirmacao": "2025-02-16T14:30:00-03:00",
+                              "statusConfirmacao": "CONFIRMADO"
+                            }
+                          },
+                          "createdAt": "2025-02-16T14:30:00.000Z"
+                        }
+                      ]
+                    }
+                  },
+                  "noEvents": {
+                    "summary": "Document with no events",
+                    "value": {
+                      "events": []
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "DFe not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "notFound": {
+                    "summary": "DFe not found",
+                    "value": {
+                      "error": "NFe not found"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/{documentType}/{documentKey}/pdf": {
+      "get": {
+        "tags": [
+          "dfes"
+        ],
+        "summary": "Get DFe PDF (DANFE/DACTE/DANFSE)",
+        "description": "Returns the auxiliary document as a PDF file.\n\n**Supported Document Types:**\n- **NFe**: Returns DANFE (Documento Auxiliar da Nota Fiscal Eletrônica) ✓\n- **CTe**: Returns DACTE (Documento Auxiliar do Conhecimento de Transporte Eletrônico) ✓\n- **CTe-OS**: Returns DACTE-OS ✓\n- **NFSe**: Returns DANFSE (Documento Auxiliar da Nota Fiscal de Serviço Eletrônica) ✓\n\n**Response Format**: The response is a Base64-encoded PDF string. Decode it to get the binary PDF file.\n\n**Use Cases**:\n- Printing shipping documents\n- Generating delivery receipts\n- Customer documentation\n",
+        "operationId": "getDfePdf",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "documentType",
+            "required": true,
+            "description": "The type of electronic fiscal document",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "nfe",
+                "cte",
+                "cte-os",
+                "nfse"
+              ]
+            },
+            "example": "nfe"
+          },
+          {
+            "in": "path",
+            "name": "documentKey",
+            "required": true,
+            "description": "The access key (chave de acesso)",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9]+$",
+              "minLength": 1
+            },
+            "example": "11250202916265003770550010002236881280492015"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF file content",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "Binary PDF file content"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "DFe not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "notFound": {
+                    "summary": "DFe not found",
+                    "value": {
+                      "error": "NFe not found"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/companies": {
+      "get": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "List companies",
+        "description": "Retrieves all companies associated with the authenticated tenant.\n\nCompanies represent legal entities (identified by CNPJ) that issue or receive electronic fiscal documents within your tenant's scope.\n\n**Note**: This endpoint returns all companies without pagination.\n",
+        "operationId": "listCompanies",
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved companies list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "companies"
+                  ],
+                  "properties": {
+                    "companies": {
+                      "type": "array",
+                      "description": "Array of company objects",
+                      "items": {
+                        "$ref": "#/components/schemas/Company"
+                      }
+                    }
+                  }
+                },
+                "examples": {
+                  "success": {
+                    "summary": "Successful response with companies",
+                    "value": {
+                      "companies": [
+                        {
+                          "id": "company-uuid-123",
+                          "name": "Empresa Exemplo LTDA",
+                          "taxId": "12345678000199"
+                        },
+                        {
+                          "id": "company-uuid-456",
+                          "name": "Outra Empresa S.A.",
+                          "taxId": "98765432000188"
+                        }
+                      ]
+                    }
+                  },
+                  "emptyResult": {
+                    "summary": "No companies found",
+                    "value": {
+                      "companies": []
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/files/upload": {
+      "post": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Upload electronic fiscal document files",
+        "description": "Uploads one or more electronic fiscal document files (XML format) for processing.\n\nThis endpoint accepts multipart/form-data requests containing XML files representing Brazilian electronic fiscal documents (NFe, CTe, NFSe, CC-e).\n\n**Processing Flow**:\n1. Files are validated as XML documents\n2. Document type is identified (NFe, CTe, NFSe, or CC-e)\n3. Document key is extracted to check for duplicates\n4. Company matching is performed (see Company Matching below)\n5. Documents are stored in S3 (path: `nfe-documents/`, `cte-documents/`, `nfse-documents/`, or `cce-documents/`)\n6. Processing workflow is triggered asynchronously\n\n**File Requirements**:\n- Format: XML (valid NFe, CTe, NFSe Nacional, or CC-e structure)\n- Content-Type: application/xml or text/xml\n- Maximum file size: 5MB per file\n- Multiple files can be uploaded in a single request using the `files` field\n\n**Company Matching (CNPJ Resolution Order)**:\nThe system attempts to match the document to companies in your tenant using CNPJs in this order.\n\nFor **NFe** documents:\n1. **Destination CNPJ** (`dest`) - The recipient of the document\n2. **Transporter CNPJ** (`transp`) - The freight carrier\n3. **Emit CNPJ** (`emit`) - The issuer of the document\n\nFor **CTe** documents:\n1. **Tomador CNPJ** (`toma`/`dest`/`rem`) - The payer for the freight service\n2. **Emit CNPJ** (`emit`) - The issuer of the document\n\nFor **NFSe** documents (service invoices — no transporter concept):\n1. **Tomador CNPJ** (`DPS.infDPS.toma`) - The service taker / recipient\n2. **Prestador CNPJ** (`DPS.infDPS.prest`) - The service provider / issuer\n\nFor **CC-e** documents (Carta de Correção Eletrônica — a correction event on an NFe):\n- The company is resolved from the **parent NFe** that the CC-e references (same access key, document type NFe).\n- The parent NFe **must already exist** in your tenant. If it does not, the CC-e is reported with\n  `cceOutcome: parent_not_found` and is not processed (upload the NFe before its CC-e).\n\nDocuments are only fully processed if a matching company is found in your tenant.\n\n**Duplicate Detection**:\n- Before uploading, the system checks if a document with the same key already exists\n- If found, `alreadyExists: true` is returned and the document is not re-processed\n- The existing `storagePath` is returned for reference\n\n**CC-e / Unsupported Outcomes** (`cceOutcome`):\n- `imported` - CC-e stored and its import workflow was triggered\n- `already_exists` - CC-e was already stored (not re-processed)\n- `parent_not_found` - the referenced parent NFe is not present in your tenant\n- `unsupported` - the file was not a recognized fiscal document type\n- `errored` - the CC-e could not be processed due to an error\n",
+        "operationId": "uploadFile",
+        "requestBody": {
+          "required": true,
+          "description": "Multipart form data containing one or more XML files",
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Electronic fiscal document XML file"
+                  },
+                  "files": {
+                    "type": "array",
+                    "description": "Multiple electronic fiscal document XML files",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
+                  }
+                }
+              },
+              "encoding": {
+                "file": {
+                  "contentType": "application/xml, text/xml"
+                },
+                "files": {
+                  "contentType": "application/xml, text/xml"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Files uploaded and processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileUploadResponse"
+                },
+                "examples": {
+                  "singleFileSuccess": {
+                    "summary": "Single file uploaded successfully",
+                    "value": {
+                      "message": "Files uploaded successfully",
+                      "filesProcessed": 1,
+                      "dfeUploadsProcessed": 1,
+                      "filesDetails": [
+                        {
+                          "filename": "35250212345678000199550010000123451123456789-nfe.xml",
+                          "contentType": "application/xml",
+                          "size": 15234,
+                          "isDfe": true,
+                          "companyFound": true,
+                          "alreadyExists": false,
+                          "documentKey": "35250212345678000199550010000123451123456789",
+                          "storagePath": "nfe-documents/company-uuid/35250212345678000199550010000123451123456789.xml"
+                        }
+                      ]
+                    }
+                  },
+                  "multipleFilesSuccess": {
+                    "summary": "Multiple files uploaded successfully",
+                    "value": {
+                      "message": "Files uploaded successfully",
+                      "filesProcessed": 3,
+                      "dfeUploadsProcessed": 2,
+                      "filesDetails": [
+                        {
+                          "filename": "nfe-001.xml",
+                          "contentType": "application/xml",
+                          "size": 15234,
+                          "isDfe": true,
+                          "companyFound": true,
+                          "alreadyExists": false,
+                          "documentKey": "35250212345678000199550010000123451123456789",
+                          "storagePath": "nfe-documents/company-uuid/35250212345678000199550010000123451123456789.xml"
+                        },
+                        {
+                          "filename": "cte-001.xml",
+                          "contentType": "application/xml",
+                          "size": 18567,
+                          "isDfe": true,
+                          "companyFound": true,
+                          "alreadyExists": false,
+                          "documentKey": "41250298765432000188570010000054321098765432",
+                          "storagePath": "cte-documents/company-uuid/41250298765432000188570010000054321098765432.xml"
+                        },
+                        {
+                          "filename": "invalid.xml",
+                          "contentType": "application/xml",
+                          "size": 1024,
+                          "isDfe": false,
+                          "companyFound": false
+                        }
+                      ]
+                    }
+                  },
+                  "duplicateDocument": {
+                    "summary": "Document already exists (duplicate detection)",
+                    "value": {
+                      "message": "Files uploaded successfully",
+                      "filesProcessed": 1,
+                      "dfeUploadsProcessed": 0,
+                      "filesDetails": [
+                        {
+                          "filename": "nfe-duplicate.xml",
+                          "contentType": "application/xml",
+                          "size": 15234,
+                          "isDfe": true,
+                          "companyFound": true,
+                          "alreadyExists": true,
+                          "documentKey": "35250212345678000199550010000123451123456789",
+                          "storagePath": "nfe-documents/company-uuid/35250212345678000199550010000123451123456789.xml"
+                        }
+                      ]
+                    }
+                  },
+                  "companyNotFound": {
+                    "summary": "File uploaded but company not found",
+                    "value": {
+                      "message": "Files uploaded successfully",
+                      "filesProcessed": 1,
+                      "dfeUploadsProcessed": 0,
+                      "filesDetails": [
+                        {
+                          "filename": "nfe-unknown-company.xml",
+                          "contentType": "application/xml",
+                          "size": 16789,
+                          "isDfe": true,
+                          "companyFound": false,
+                          "documentKey": "35250212345678000199550010000123451123456789"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request (invalid file format or content)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "noFiles": {
+                    "summary": "No files provided",
+                    "value": {
+                      "error": "No files provided in the request"
+                    }
+                  },
+                  "invalidFormat": {
+                    "summary": "Invalid file format",
+                    "value": {
+                      "error": "Invalid file format. Only XML files are accepted"
+                    }
+                  },
+                  "invalidContent": {
+                    "summary": "Invalid XML content",
+                    "value": {
+                      "error": "Failed to parse XML content"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/sped/efd": {
+      "get": {
+        "summary": "Generate SPED EFD-ICMS/IPI file",
+        "description": "Generates a SPED EFD-ICMS/IPI file for a company within a given date range.\nThe file is generated from NFe documents in the Entrada (inbound/purchase)\nperspective, with CFOPs overridden from invoice item classification augmentations.\n",
+        "operationId": "generateSped",
+        "tags": [
+          "SPED"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "required": true,
+            "description": "The company ID to generate the SPED file for",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "required": true,
+            "description": "Period start date (YYYY-MM-DD)",
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "example": "2025-01-01"
+            }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "required": true,
+            "description": "Period end date (YYYY-MM-DD)",
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "example": "2025-01-31"
+            }
+          },
+          {
+            "name": "cod_fin",
+            "in": "query",
+            "required": false,
+            "description": "File purpose (0=Original, 1=Substitution)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "0",
+                "1"
+              ],
+              "default": "0"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "SPED EFD file generated successfully",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "description": "Pipe-delimited SPED EFD file content"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters"
+          },
+          "404": {
+            "description": "Company not found"
+          }
+        }
+      }
+    }
+  },
+  "webhooks": {
+    "event": {
+      "post": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Event notification",
+        "description": "> **🚧 Not Implemented** - This webhook is planned but not yet available.\n\nCamu sends this webhook to your registered URL when a new event occurs.\n\n**Setup:**\nTo receive webhooks, contact Camu support to register your endpoint URL.\nYour endpoint must:\n- Accept POST requests\n- Respond with 2xx status within 30 seconds\n- Handle duplicate deliveries (use `id` for idempotency)\n\n**Retry Policy:**\nFailed deliveries are retried with exponential backoff:\n- 1st retry: 1 minute\n- 2nd retry: 5 minutes\n- 3rd retry: 30 minutes\n- Final retry: 2 hours\n\n**Security:**\nEach webhook includes a signature header (`X-Camu-Signature`) for verification.\nValidate this signature using your webhook secret before processing.\n\n**Acknowledgment:**\nAfter successfully processing the event, call `POST /{documentType}/events/{eventId}/ack`\nto confirm receipt and stop retries.\n",
+        "operationId": "webhookEvent",
+        "requestBody": {
+          "description": "The event payload",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookPayload"
+              },
+              "examples": {
+                "capturedEvent": {
+                  "summary": "Document captured event",
+                  "value": {
+                    "id": "0192d4e5-7a8b-7c9d-8e0f-1a2b3c4d5e6f",
+                    "document_key": "11250202916265003770550010002236881280492015",
+                    "document_type": "nfe",
+                    "type": "captured",
+                    "source": "camu",
+                    "timestamp": "2025-02-03T10:30:00.000Z",
+                    "content": {
+                      "capturedBy": "sefaz-sync"
+                    },
+                    "_links": [
+                      {
+                        "type": "detail",
+                        "url": "/nfe/11250202916265003770550010002236881280492015"
+                      }
+                    ]
+                  }
+                },
+                "validationFailedEvent": {
+                  "summary": "Validation failed event",
+                  "value": {
+                    "id": "0192d4e5-7a8b-7c9d-8e0f-1a2b3c4d5e70",
+                    "document_key": "11250202916265003770550010002236881280492015",
+                    "document_type": "nfe",
+                    "type": "validation_failed",
+                    "source": "camu",
+                    "timestamp": "2025-02-03T10:31:00.000Z",
+                    "content": [
+                      {
+                        "lineNumber": 1,
+                        "classification": {
+                          "cfop": 1565,
+                          "classification": "Uso consumo"
+                        },
+                        "validations": [
+                          {
+                            "type": "ICMS",
+                            "result": "error",
+                            "message": "ICMS Divergente"
+                          },
+                          {
+                            "type": "IPI",
+                            "result": "approved"
+                          }
+                        ]
+                      }
+                    ],
+                    "_links": [
+                      {
+                        "type": "detail",
+                        "url": "/nfe/11250202916265003770550010002236881280492015"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Event received successfully"
+          },
+          "202": {
+            "description": "Event accepted for processing"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key",
+        "description": "API key authentication. Include your API key in the `x-api-key` header of every request.\n\nExample:\n```\nx-api-key: your-api-key-here\n```\n\nContact your Camu administrator to obtain an API key.\n"
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Bad request - Invalid input or validation error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "validationError": {
+                "summary": "Validation error",
+                "value": {
+                  "error": "Invalid query parameters: limit - Limit must be between 1 and 100"
+                }
+              },
+              "invalidInput": {
+                "summary": "Invalid input",
+                "value": {
+                  "error": "Invalid path parameters: documentKey - Document key must be alphanumeric"
+                }
+              },
+              "invalidFields": {
+                "summary": "Invalid fields parameter",
+                "value": {
+                  "error": "Invalid field(s): invalidField. Valid fields are: documentType, documentKey, documentNumber, emissionDate, content, xmlContent"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Unauthorized - Missing or invalid API key",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "missingApiKey": {
+                "summary": "Missing API key",
+                "value": {
+                  "error": "Missing API key. Include 'x-api-key' header in your request"
+                }
+              },
+              "invalidApiKey": {
+                "summary": "Invalid API key",
+                "value": {
+                  "error": "Invalid API key"
+                }
+              },
+              "tenantNotFound": {
+                "summary": "Tenant not found",
+                "value": {
+                  "error": "Tenant not found for the provided API key"
+                }
+              }
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "notFound": {
+                "summary": "Resource not found",
+                "value": {
+                  "error": "Resource not found"
+                }
+              }
+            }
+          }
+        }
+      },
+      "InternalServerError": {
+        "description": "Internal server error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "serverError": {
+                "summary": "Generic server error",
+                "value": {
+                  "error": "Internal server error"
+                }
+              },
+              "databaseError": {
+                "summary": "Database error",
+                "value": {
+                  "error": "Database connection failed"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "DfeSummary": {
+        "type": "object",
+        "description": "DFe summary object used in list responses",
+        "properties": {
+          "documentType": {
+            "type": "string",
+            "enum": [
+              "nfe",
+              "cte",
+              "cte-os",
+              "nfse"
+            ],
+            "description": "The type of electronic fiscal document",
+            "example": "nfe"
+          },
+          "documentKey": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The access key (chave de acesso).\n\nThis is the unique identifier for the electronic tax document issued by the Brazilian tax authorities.\n",
+            "example": "11250202916265003770550010002236881280492015"
+          },
+          "documentNumber": {
+            "type": "string",
+            "nullable": true,
+            "description": "The sequential document number (número da nota/conhecimento).\n\nThis is the invoice number assigned by the issuer.\n",
+            "example": "223688"
+          },
+          "documentSeries": {
+            "type": "string",
+            "nullable": true,
+            "description": "The document series (série do documento).\n\nA number between 1-999 that identifies the document series.\n",
+            "example": "1"
+          },
+          "emissionDate": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "The date and time when the document was issued (data de emissão).\n\nFormat: ISO 8601 with timezone.\n",
+            "example": "2025-02-09T10:30:00-03:00"
+          },
+          "manifestationStatus": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "acknowledgement_of_issuance",
+              "confirmation_of_operation",
+              "operation_unknown",
+              "operation_not_performed",
+              "executing"
+            ],
+            "description": "The manifestation status of the document (NFe only).\n\n**Values:**\n- `acknowledgement_of_issuance`: Ciência da Emissão - Recipient acknowledges awareness of the invoice\n- `confirmation_of_operation`: Confirmação da Operação - Recipient confirms the operation took place\n- `operation_unknown`: Desconhecimento da Operação - Recipient does not recognize the operation\n- `operation_not_performed`: Operação não Realizada - Operation was not performed\n- `executing`: Manifestação em Execução - Manifestation is being processed\n",
+            "example": "confirmation_of_operation"
+          },
+          "documentStatus": {
+            "type": "string",
+            "enum": [
+              "captured",
+              "in_review",
+              "approved",
+              "errors",
+              "canceled",
+              "pending_approval"
+            ],
+            "description": "The validation status of the document in the Camu system.\n\n**Values:**\n- `captured`: Document was captured but not yet reviewed\n- `in_review`: Document is under review\n- `approved`: Document passed validation\n- `errors`: Document has validation errors\n- `canceled`: Document was canceled\n- `pending_approval`: Automated validation finished, awaiting user approval\n",
+            "example": "approved"
+          },
+          "erpDocumentStatus": {
+            "type": "string",
+            "enum": [
+              "no_purchase_order_required",
+              "purchase_order_found",
+              "purchase_order_not_found",
+              "purchase_delivery_draft_in_erp",
+              "purchase_delivery_posted_in_erp",
+              "purchase_invoice_draft_in_erp",
+              "purchase_invoice_posted_in_erp",
+              "canceled_in_erp",
+              "credit_note_posted_in_erp",
+              "credit_note_draft_in_erp",
+              "sales_invoice_found",
+              "sales_invoice_not_found",
+              "not_applicable",
+              "pending",
+              "integration_error"
+            ],
+            "description": "The status of the document in the ERP (e.g., SAP B1, Oracle NetSuite).\n\nThis is independent of `documentStatus` (which reflects validation/review in Camu) and tracks the document's lifecycle in the customer's ERP.\n\n**Values:**\n- `no_purchase_order_required`: The document does not require an associated purchase order\n- `purchase_order_found`: A matching purchase order was found in the ERP\n- `purchase_order_not_found`: No matching purchase order could be found in the ERP\n- `purchase_delivery_draft_in_erp`: A draft purchase delivery (goods receipt) exists in the ERP\n- `purchase_delivery_posted_in_erp`: The purchase delivery (goods receipt) was posted in the ERP\n- `purchase_invoice_draft_in_erp`: A draft purchase invoice exists in the ERP\n- `purchase_invoice_posted_in_erp`: The purchase invoice was posted in the ERP\n- `canceled_in_erp`: The document was canceled in the ERP\n- `credit_note_posted_in_erp`: A credit note was posted in the ERP\n- `credit_note_draft_in_erp`: A credit note draft was created in the ERP\n- `sales_invoice_found`: Return NF-e — the sales invoice it returns was found in the ERP\n- `sales_invoice_not_found`: Return NF-e — the sales invoice it returns was not found in the ERP\n- `not_applicable`: ERP posting does not apply to this document\n- `pending`: ERP processing has not yet started\n- `integration_error`: An error occurred while integrating the document with the ERP\n",
+            "example": "purchase_invoice_posted_in_erp"
+          },
+          "content": {
+            "type": "object",
+            "description": "Complete parsed XML content in JSON format.\n\nThe structure varies based on the document type (NFe, CTe, NFSe).\n",
+            "additionalProperties": true
+          },
+          "xmlContent": {
+            "type": "string",
+            "nullable": true,
+            "description": "Raw XML content of the document.\n\nThis field is only returned when explicitly requested via the `fields` parameter.\n",
+            "example": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><nfeProc>...</nfeProc>"
+          }
+        }
+      },
+      "ListDfesResponse": {
+        "type": "object",
+        "required": [
+          "documents"
+        ],
+        "properties": {
+          "documents": {
+            "type": "array",
+            "description": "Array of DFe summary objects",
+            "items": {
+              "$ref": "#/components/schemas/DfeSummary"
+            }
+          },
+          "nextOffset": {
+            "type": "integer",
+            "description": "Offset for retrieving the next page of results.\n\nThis field is omitted when there are no more pages available.\n",
+            "example": 100
+          },
+          "nextUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "Full URL for retrieving the next page of results.\n\nThis field is omitted when there are no more pages available.\n",
+            "example": "https://api.service.camu.com.br/nfe?offset=100&limit=100"
+          }
+        }
+      },
+      "Dfe": {
+        "type": "object",
+        "required": [
+          "documentType",
+          "documentKey",
+          "capturedAt",
+          "content"
+        ],
+        "properties": {
+          "documentType": {
+            "type": "string",
+            "enum": [
+              "nfe",
+              "cte",
+              "cte-os",
+              "nfse"
+            ],
+            "description": "The type of electronic fiscal document",
+            "example": "nfe"
+          },
+          "documentKey": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The access key (chave de acesso)",
+            "example": "11250202916265003770550010002236881280492015"
+          },
+          "documentNumber": {
+            "type": "string",
+            "nullable": true,
+            "description": "The sequential document number",
+            "example": "223688"
+          },
+          "capturedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The date and time when the document was captured and stored in the Camu system.\n\nFormat: ISO 8601 (UTC).\n",
+            "example": "2025-02-09T15:30:00.000Z"
+          },
+          "content": {
+            "type": "object",
+            "description": "Complete parsed XML content in JSON format.\n\nThe structure varies based on the document type (NFe, CTe, NFSe).\n",
+            "additionalProperties": true
+          },
+          "xmlContent": {
+            "type": "string",
+            "nullable": true,
+            "description": "Raw XML content of the document.\n\nThis field is always returned in the detail endpoint.\n",
+            "example": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><nfeProc>...</nfeProc>"
+          }
+        },
+        "description": "Complete DFe object with full document content"
+      },
+      "Company": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "taxId"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for the company within the Camu system.\n\nFormat: UUID v4\n",
+            "example": "a7b3c9d1-e5f6-4a2b-8c3d-9e7f6a5b4c3d"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The legal company name (razão social).\n\nThis is the official registered name of the company.\n",
+            "example": "Empresa Exemplo LTDA"
+          },
+          "taxId": {
+            "type": "string",
+            "pattern": "^\\d{14}$",
+            "description": "The company's CNPJ (Cadastro Nacional da Pessoa Jurídica).\n\nFormat: 14 digits (without formatting characters)\n",
+            "example": "12345678000199"
+          }
+        },
+        "description": "Company entity representing a legal entity within the tenant"
+      },
+      "FileUploadResponse": {
+        "type": "object",
+        "required": [
+          "message",
+          "filesProcessed",
+          "dfeUploadsProcessed",
+          "filesDetails"
+        ],
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Status message describing the upload result",
+            "example": "Files uploaded successfully"
+          },
+          "filesProcessed": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Total number of files that were processed",
+            "example": 3
+          },
+          "dfeUploadsProcessed": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of DFe (electronic fiscal documents) that were successfully uploaded.\n\nThis number may be less than `filesProcessed` if some files were not valid DFes or if companies were not found.\n",
+            "example": 2
+          },
+          "filesDetails": {
+            "type": "array",
+            "description": "Detailed information about each processed file",
+            "items": {
+              "type": "object",
+              "properties": {
+                "filename": {
+                  "type": "string",
+                  "description": "Original filename of the uploaded file",
+                  "example": "35250212345678000199550010000123451123456789-nfe.xml"
+                },
+                "contentType": {
+                  "type": "string",
+                  "description": "MIME type of the uploaded file",
+                  "example": "application/xml"
+                },
+                "size": {
+                  "type": "integer",
+                  "description": "File size in bytes",
+                  "example": 15234
+                },
+                "isDfe": {
+                  "type": "boolean",
+                  "description": "Indicates whether the file was recognized as a valid DFe (electronic fiscal document).\n\n`false` indicates the file was not a valid DFe XML structure.\n",
+                  "example": true
+                },
+                "companyFound": {
+                  "type": "boolean",
+                  "description": "Indicates whether a matching company was found in your tenant for this document.\n\nDocuments are only fully processed if a company match is found.\n",
+                  "example": true
+                },
+                "alreadyExists": {
+                  "type": "boolean",
+                  "description": "Indicates whether the document already exists in the database.\n\nIf `true`, the document was not processed again (duplicate detection).\n",
+                  "example": false
+                },
+                "documentKey": {
+                  "type": "string",
+                  "description": "The 44-character access key (chave de acesso) extracted from the DFe document.\n\nOnly present for valid DFe documents.\n",
+                  "example": "35250212345678000199550010000123451123456789"
+                },
+                "storagePath": {
+                  "type": "string",
+                  "description": "The S3 storage path where the document was uploaded.\n\nOnly present for successfully processed DFes or existing documents.\n",
+                  "example": "nfe-documents/company-uuid/35250212345678000199550010000123451123456789.xml"
+                },
+                "cceOutcome": {
+                  "type": "string",
+                  "enum": [
+                    "imported",
+                    "already_exists",
+                    "parent_not_found",
+                    "unsupported",
+                    "errored"
+                  ],
+                  "description": "Outcome for CC-e (Carta de Correção Eletrônica) files and unrecognized files.\n\nOnly present on the CC-e path or when a file could not be recognized as a fiscal document.\nNFe/CTe/NFSe files do not set this field.\n",
+                  "example": "imported"
+                },
+                "uploadResult": {
+                  "type": "object",
+                  "description": "Result of the upload operation (only present for successfully processed DFes).\n\nContent varies based on the processing result.\n",
+                  "additionalProperties": true,
+                  "example": {
+                    "status": "success",
+                    "documentKey": "35250212345678000199550010000123451123456789"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "description": "Response object for file upload operations"
+      },
+      "ListDfeEventsResponse": {
+        "type": "object",
+        "required": [
+          "events"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "description": "Array of events associated with the document",
+            "items": {
+              "$ref": "#/components/schemas/DfeEventItem"
+            }
+          }
+        },
+        "description": "Response object containing document events"
+      },
+      "ListUnifiedEventsResponse": {
+        "type": "object",
+        "required": [
+          "events",
+          "has_more"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "description": "Array of unified events across all documents",
+            "items": {
+              "$ref": "#/components/schemas/UnifiedEvent"
+            }
+          },
+          "has_more": {
+            "type": "boolean",
+            "description": "Indicates whether there are more events available.\n\nIf `true`, use `next_cursor` to fetch the next page.\n",
+            "example": true
+          },
+          "next_cursor": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Cursor to fetch the next page of events (UUIDv7 format).\n\nPass this value as the `cursor` query parameter to retrieve the next page.\nThis field is null when there are no more events.\n\nThe cursor is a UUIDv7 which encodes the timestamp of the last event,\nensuring consistent ordering and efficient pagination.\n",
+            "example": "0192d4e5-7a8b-7c9d-8e0f-1a2b3c4d5e70"
+          }
+        },
+        "description": "Response object containing unified events list with pagination"
+      },
+      "AckEventResponse": {
+        "type": "object",
+        "required": [
+          "acknowledged",
+          "eventId"
+        ],
+        "properties": {
+          "acknowledged": {
+            "type": "boolean",
+            "description": "Indicates whether the acknowledgment was successful.\n\nAlways `true` on a 200 response.\n",
+            "example": true
+          },
+          "eventId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The event ID that was acknowledged.\n\nConfirms which event was processed.\n",
+            "example": "0192d4e5-7a8b-7c9d-8e0f-1a2b3c4d5e6f"
+          }
+        },
+        "description": "Response confirming event acknowledgment"
+      },
+      "WebhookPayload": {
+        "type": "object",
+        "required": [
+          "id",
+          "document_key",
+          "document_type",
+          "type",
+          "source",
+          "timestamp",
+          "content",
+          "_links"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for the event.\n\nUse this for idempotency - you may receive the same event multiple times.\n",
+            "example": "0192d4e5-7a8b-7c9d-8e0f-1a2b3c4d5e6f"
+          },
+          "document_key": {
+            "type": "string",
+            "description": "The access key (chave de acesso) of the related document",
+            "example": "11250202916265003770550010002236881280492015"
+          },
+          "document_type": {
+            "type": "string",
+            "enum": [
+              "nfe",
+              "cte",
+              "nfse"
+            ],
+            "description": "The type of electronic fiscal document",
+            "example": "nfe"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "captured",
+              "canceled",
+              "validation_succeed",
+              "validation_failed",
+              "manifestation"
+            ],
+            "description": "The event type:\n- `captured` - Document captured in system\n- `canceled` - Document canceled\n- `validation_succeed` - Validation passed\n- `validation_failed` - Validation failed\n- `manifestation` - Manifestation event\n",
+            "example": "captured"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "camu",
+              "sefaz"
+            ],
+            "description": "Event origin:\n- `camu` - Generated by Camu system\n- `sefaz` - From Brazilian tax authorities\n",
+            "example": "camu"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the event occurred (ISO 8601 UTC)",
+            "example": "2025-02-03T10:30:00.000Z"
+          },
+          "content": {
+            "type": "object",
+            "description": "Event-specific payload data",
+            "additionalProperties": true
+          },
+          "_links": {
+            "type": "array",
+            "description": "Links to related resources",
+            "items": {
+              "$ref": "#/components/schemas/EventLink"
+            }
+          }
+        },
+        "description": "Webhook event payload sent to your endpoint"
+      },
+      "UnifiedEvent": {
+        "type": "object",
+        "required": [
+          "id",
+          "document_key",
+          "document_type",
+          "event_type",
+          "event_type_code",
+          "event_category",
+          "source",
+          "event_content",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for the event.\n\nFormat: UUID v7 (time-ordered for efficient pagination)\n",
+            "example": "0192d4e5-7a8b-7c9d-8e0f-1a2b3c4d5e6f"
+          },
+          "document_key": {
+            "type": "string",
+            "description": "The access key (chave de acesso) of the related document.\n",
+            "example": "11250202916265003770550010002236881280492015"
+          },
+          "document_type": {
+            "type": "string",
+            "enum": [
+              "nfe",
+              "cte",
+              "cte-os",
+              "nfse"
+            ],
+            "description": "The type of electronic fiscal document",
+            "example": "nfe"
+          },
+          "event_type": {
+            "type": "string",
+            "nullable": true,
+            "description": "Human-readable event type name (e.g., Cancel, Correction).\n",
+            "example": "Cancel"
+          },
+          "event_type_code": {
+            "type": "string",
+            "nullable": true,
+            "description": "Raw event type code from Sefaz (e.g., 110111 for Cancel).\n",
+            "example": "110111"
+          },
+          "event_category": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "document",
+              "canceled",
+              "manifestation",
+              "delivery",
+              "correction",
+              "validation",
+              "other"
+            ],
+            "description": "Category of the event for grouping purposes.\n",
+            "example": "canceled"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "camu",
+              "sefaz"
+            ],
+            "description": "The origin of the event.\n\n- `camu` - Event generated by the Camu system\n- `sefaz` - Event from Brazilian tax authorities\n",
+            "example": "sefaz"
+          },
+          "event_content": {
+            "description": "Event-specific content and metadata.\n\nThe structure varies based on event type:\n- `captured`: Object with capturedBy, source info\n- `canceled`: Object with cancellation reason, protocol\n- `validation_succeed/validation_failed`: Array of line items with validation results (see below)\n- `manifestation`: Object with tpEvento, xEvento, protocol details\n\n**Validation content structure (validation_succeed/validation_failed):**\n```json\n[\n  {\n    \"lineNumber\": 1,\n    \"classification\": {\n      \"cfop\": 1565,\n      \"classification\": \"Uso consumo\"\n    },\n    \"validations\": [\n      {\n        \"type\": \"ICMS\",\n        \"result\": \"approved\"\n      },\n      {\n        \"type\": \"IPI\",\n        \"result\": \"error\",\n        \"message\": \"ICMS Divergente\"\n      }\n    ]\n  }\n]\n```\n\nEach line item contains:\n- `lineNumber`: The document line number\n- `classification`: CFOP code and classification description\n- `validations`: Array of validation results per tax type (ICMS, IPI, etc.)\n  - `type`: Tax type being validated\n  - `result`: `\"approved\"` or `\"error\"`\n  - `message`: Error message (only present when result is `\"error\"`)\n"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the event was created (ISO 8601 UTC).\n",
+            "example": "2025-02-03T10:30:00.000Z"
+          }
+        },
+        "description": "A unified event object for the events list endpoint"
+      },
+      "DfeEventItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "documentKey",
+          "documentType",
+          "eventContent",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for the event within the Camu system.\n\nFormat: UUID v4\n",
+            "example": "a7b3c9d1-e5f6-4a2b-8c3d-9e7f6a5b4c3d"
+          },
+          "documentKey": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The access key (chave de acesso) of the parent document.\n\nThis is the unique identifier for the electronic tax document.\n",
+            "example": "11250202916265003770550010002236881280492015"
+          },
+          "documentType": {
+            "type": "string",
+            "enum": [
+              "nfe",
+              "cte",
+              "cte-os",
+              "nfse"
+            ],
+            "description": "The type of electronic fiscal document this event belongs to",
+            "example": "nfe"
+          },
+          "eventType": {
+            "type": "string",
+            "nullable": true,
+            "description": "Human-readable event type name. Values vary by document type.\n\n**NFe event types:**\n- `Correction` - Carta de Correção Eletrônica (tpEvento: 110110)\n- `Cancel` - Document cancellation (tpEvento: 110111)\n- `ConfirmOperation` - Confirmação da Operação (tpEvento: 210200)\n- `AcknowledgeReceipt` - Ciência da Operação (tpEvento: 210210)\n- `UnknownOperation` - Desconhecimento da Operação (tpEvento: 210220)\n- `OperationNotPerformed` - Operação não Realizada (tpEvento: 210240)\n\n**CTe/CT-e OS event types:**\n- `Authorized` - CTe authorization event\n- `Correction` - Carta de Correção Eletrônica (tpEvento: 110110)\n- `Cancel` - Document cancellation (tpEvento: 110111)\n- `DeliveryNote` - Comprovante de Entrega (tpEvento: 110180)\n- `CancelDeliveryNote` - Cancelamento do Comprovante (tpEvento: 110181)\n- `DeliveryFailed` - Insucesso na Entrega (tpEvento: 110190)\n- `DeliverySuccess` - Entrega Realizada (tpEvento: 110191)\n- `AuthorizedMDFe` - MDF-e Autorizado (tpEvento: 310610)\n- `CancelMDFe` - MDF-e Cancelado (tpEvento: 310611)\n\n**NFSe event types:**\n- `Document` - Documento NFSe (eventTypeCode: NFSE)\n- `Cancel` - NFSe cancellation (eventTypeCode: CANCELAMENTO)\n- `CancelBySubstitution` - Cancellation by substitution (eventTypeCode: CANCELAMENTO_POR_SUBSTITUICAO)\n- `CancelApprovedFiscalAnalysis` - Cancellation approved after fiscal analysis\n- `ServiceTakerConfirmation` - Service taker confirmation (eventTypeCode: CONFIRMACAO_TOMADOR)\n\nMay be null if the event type could not be determined.\n",
+            "example": "AcknowledgeReceipt"
+          },
+          "eventTypeCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "Raw event type code (tpEvento) from Sefaz or municipal systems.\n\n**NFe Codes:**\n- `110110` - Carta de Correção Eletrônica (CCe)\n- `110111` - Cancelamento\n- `210200` - Confirmação da Operação\n- `210210` - Ciência da Emissão\n- `210220` - Desconhecimento da Operação\n- `210240` - Operação não Realizada\n\n**CTe/CT-e OS Codes:**\n- `110110` - Carta de Correção\n- `110111` - Cancelamento\n- `110180` - Comprovante de Entrega\n- `110181` - Cancelamento do Comprovante de Entrega\n- `110190` - Insucesso na Entrega\n- `110191` - Entrega Realizada\n- `310610` - MDF-e Autorizado\n- `310611` - MDF-e Cancelado\n\n**NFSe Codes (string-based):**\n- `NFSE` - Documento NFSe\n- `CANCELAMENTO` - Cancelamento\n- `CANCELAMENTO_POR_SUBSTITUICAO` - Cancelamento por Substituição\n- `CONFIRMACAO_TOMADOR` - Confirmação do Tomador\n",
+            "example": "210210"
+          },
+          "eventCategory": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "document",
+              "canceled",
+              "manifestation",
+              "delivery",
+              "correction",
+              "validation",
+              "other"
+            ],
+            "description": "Category of the event for easier filtering and classification.\n\n**Values:**\n- `document` - Document-related event (authorization, etc.)\n- `canceled` - Cancellation event\n- `manifestation` - Recipient manifestation (NFe: Ciência, Confirmação, etc.)\n- `delivery` - Delivery-related event (CTe: Comprovante de Entrega, etc.)\n- `correction` - Correction letter (CCe)\n- `validation` - Validation event (Approved, ValidationFailed)\n- `other` - Other event types\n",
+            "example": "manifestation"
+          },
+          "eventContent": {
+            "type": "object",
+            "description": "Complete parsed XML content of the event in JSON format.\n\nThe structure varies based on document and event type. Common structures include:\n\n**NFe events** (`procEventoNFe.evento.infEvento`):\n- Manifestação: `tpEvento`, `xEvento`, `dhEvento`\n- Cancelamento: `tpEvento`, `xEvento`, `xJust` (justification)\n- CCe: `tpEvento`, `xEvento`, `xCorrecao` (correction text)\n\n**CTe events**:\n- Authorization (`cteProc.protCTe.infProt`): `cStat`, `xMotivo`, `dhRecbto`\n- Other events (`procEventoCTe.evento.infEvento`): `tpEvento`, `xEvento`, `dhEvento`\n- MDF-e linkage: `tpEvento`, `xEvento`, `chMDFe` (MDF-e key)\n\n**NFSe events**:\n- Cancelamento: `codigoCancelamento`, `motivoCancelamento`\n- Confirmação: `dataConfirmacao`, `statusConfirmacao`\n\nRefer to SEFAZ/municipal documentation for complete event schemas.\n",
+            "additionalProperties": true,
+            "example": {
+              "procEventoNFe": {
+                "evento": {
+                  "infEvento": {
+                    "tpEvento": "210210",
+                    "xEvento": "Ciencia da Operacao",
+                    "dhEvento": "2025-02-10T14:30:00-03:00",
+                    "nSeqEvento": "1"
+                  }
+                }
+              }
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The date and time when the event was captured and stored in the Camu system.\n\nFormat: ISO 8601 (UTC).\n",
+            "example": "2025-02-10T14:30:00.000Z"
+          }
+        },
+        "description": "A single event associated with a DFe document"
+      },
+      "EventLink": {
+        "type": "object",
+        "required": [
+          "type",
+          "url"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "detail",
+              "validation",
+              "ack"
+            ],
+            "description": "The type of related resource this link points to.\n\n- `detail` - Link to the full document details\n- `validation` - Link to validation results for this event\n- `ack` - Link to acknowledgment/manifestation details\n",
+            "example": "detail"
+          },
+          "url": {
+            "type": "string",
+            "description": "The relative URL path to the related resource.\n\nUse this path relative to the API base URL.\n",
+            "example": "/nfe/11250202916265003770550010002236881280492015"
+          }
+        },
+        "description": "A link to a related resource"
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Human-readable error message describing what went wrong",
+            "example": "Invalid query parameters: limit - Limit must be between 1 and 1000"
+          }
+        },
+        "description": "Standard error response object"
+      }
+    }
+  },
+  "security": [
+    {
+      "ApiKeyAuth": []
+    }
+  ]
+}
